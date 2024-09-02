@@ -1,0 +1,14 @@
+pub const LOSCFG_AARCH64 = false;
+pub const LOSBLD_ATTRIB_ALIGN = false;
+pub const LOSCFG_OBSOLETE_API = false;
+pub const LOSCFG_COMPAT_POSIX = false;
+pub const LOSCFG_BASE_IPC_EVENT = true;
+pub const LOSCFG_BASE_CORE_TIMESLICE = true;
+pub const LOSCFG_KERNEL_SMP = false;
+pub const LOSCFG_KERNEL_SMP_TASK_SYNC = false;
+pub const LOSCFG_DEBUG_SCHED_STATISTICS = false;
+pub const LOSCFG_KERNEL_PERF = false;
+pub const LOSCFG_KERNEL_SMP_LOCKDEP = false;
+pub const LOSCFG_LIB_CONFIGURABLE = false;
+pub const LOSCFG_KERNEL_NX = false;
+pub const LOSCFG_KERNEL_DYNLOAD = false;
