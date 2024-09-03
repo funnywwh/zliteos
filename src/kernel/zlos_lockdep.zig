@@ -1,6 +1,7 @@
 const std = @import("std");
 const t = @import("./zlos_typedef.zig");
 const defines = @import("./zlos_defines.zig");
+const spinlock = @import("./zlos_spinlock.zig");
 pub const MAX_LOCK_DEPTH: usize = 16;
 
 // enum LockDepErrType {
@@ -44,6 +45,9 @@ pub const LockDep = struct {
 //  * @since Huawei LiteOS V200R003C00
 //  */
 // extern VOID OsLockDepCheckIn(const SPIN_LOCK_S *lock);
+pub fn OsLockDepCheckIn(lock: *spinlock.SPIN_LOCK_S) void {
+    _ = lock;
+}
 
 // /**
 //  * @ingroup los_lockdep
@@ -64,7 +68,9 @@ pub const LockDep = struct {
 //  * @since Huawei LiteOS V200R003C00
 //  */
 // extern VOID OsLockDepRecord(SPIN_LOCK_S *lock);
-
+pub fn OsLockDepRecord(lock: *spinlock.SPIN_LOCK_S) void {
+    _ = lock;
+}
 // /**
 //  * @ingroup los_lockdep
 //  *
@@ -84,7 +90,9 @@ pub const LockDep = struct {
 //  * @since Huawei LiteOS V200R003C00
 //  */
 // extern VOID OsLockDepCheckOut(SPIN_LOCK_S *lock);
-
+pub fn OsLockDepCheckOut(lock: *spinlock.SPIN_LOCK_S) void {
+    _ = lock;
+}
 // /**
 //  * @ingroup los_lockdep
 //  *
@@ -103,6 +111,7 @@ pub const LockDep = struct {
 //  * @since Huawei LiteOS V200R003C00
 //  */
 // extern VOID OsLockdepClearSpinlocks(VOID);
+pub fn OsLockdepClearSpinlocks() void {}
 
 // #endif /* LOSCFG_KERNEL_SMP_LOCKDEP */
 

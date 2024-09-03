@@ -308,3 +308,5 @@ pub fn LOS_SET_DL_NX_HEAP_BASE(addr: t.UINTPTR) void {
 pub fn LOS_SET_DL_NX_HEAP_SIZE(size: t.size_t) void {
     _ = size;
 }
+
+pub const LOSCFG_HWI_PRIO_LIMIT = 32;

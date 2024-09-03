@@ -75,11 +75,11 @@ pub const SortLinkList = struct {
     idxRollNum: t.UINT32 = 0,
 };
 
-// typedef struct {
-//     LOS_DL_LIST *sortLink;
-//     UINT16 cursor;
-//     UINT16 reserved;
-// } SortLinkAttribute;
+pub const SortLinkAttribute = struct {
+    sortLink: ?*list.LOS_DL_LIST = null,
+    cursor: t.UINT16 = 0,
+    reserved: t.UINT16 = 0,
+};
 
 // extern UINT32 OsSortLinkInit(SortLinkAttribute *sortLinkHeader);
 // extern VOID OsAdd2SortLink(const SortLinkAttribute *sortLinkHeader, SortLinkList *sortList);

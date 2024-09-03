@@ -12,3 +12,4 @@ pub const LOSCFG_KERNEL_SMP_LOCKDEP = false;
 pub const LOSCFG_LIB_CONFIGURABLE = false;
 pub const LOSCFG_KERNEL_NX = false;
 pub const LOSCFG_KERNEL_DYNLOAD = false;
+pub const LOSCFG_BASE_IPC_SEM = true;

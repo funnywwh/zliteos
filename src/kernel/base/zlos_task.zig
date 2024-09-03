@@ -6,6 +6,11 @@ const sortlink = @import("../zlos_sortlink_pri.zig");
 const event = @import("../zlos_event.zig");
 const lockdep = @import("../zlos_lockdep.zig");
 const sched_debug_pri = @import("../base/zlos_sched_debug_pri.zig");
+const sched_pri = @import("../base/zlos_sched_pri.zig");
+const hwi = @import("../zlos_hwi.zig");
+
+const INT_PEND_RESCH = @intFromEnum(sched_pri.SchedFlag.INT_PEND_RESCH);
+
 pub const TSK_ENTRY_FUNC = if (defines.LOSCFG_OBSOLETE_API)
     *const fn (*t.VOID) *t.VOID
 else
@@ -147,3 +152,48 @@ pub const LosTaskCB = struct {
     else
         null,
 };
+
+pub var g_taskScheduled: t.UINT32 = 0;
+
+//LITE_OS_SEC_TEXT_MINOR
+pub fn LOS_TaskLock() void {
+    var intSave: t.UINT32 = 0;
+    var losTaskLock: *t.UINT32 = null;
+
+    intSave = hwi.LOS_IntLock();
+    losTaskLock = &sched_pri.OsPercpuGet().taskLockCnt;
+    losTaskLock.* += 1;
+    hwi.LOS_IntRestore(intSave);
+}
+
+pub inline fn ArchCurrTaskGet() ?*t.VOID {
+    return null;
+}
+//LITE_OS_SEC_TEXT_MINOR
+pub fn LOS_TaskUnlock() !void {
+    var intSave: t.UINT32 = 0;
+    var losTaskLock: *t.UINT32 = undefined;
+    var _percpu: ?*sched_pri.Percpu = null;
+
+    intSave = hwi.LOS_IntLock();
+
+    _percpu = sched_pri.OsPercpuGet();
+    if (_percpu == null) {
+        return error.percpu_null;
+    }
+    const percpu = _percpu.?;
+    losTaskLock = &percpu.taskLockCnt;
+    if (losTaskLock.* > 0) {
+        losTaskLock.* -= 1;
+        if ((losTaskLock.* == 0) and (percpu.schedFlag == INT_PEND_RESCH) and
+            sched_pri.OS_SCHEDULER_ACTIVE() != 0)
+        {
+            percpu.schedFlag = sched_pri.INT_NO_RESCH;
+            hwi.LOS_IntRestore(intSave);
+            sched_pri.LOS_Schedule();
+            return;
+        }
+    }
+
+    hwi.LOS_IntRestore(intSave);
+}

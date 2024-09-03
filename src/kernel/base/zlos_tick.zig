@@ -1,3 +1,4 @@
+const syserr = @import("../zlos_error.zig");
 const t = @import("../zlos_typedef.zig");
 // LITE_OS_SEC_BSS volatile UINT64 g_tickCount[LOSCFG_KERNEL_CORE_NUM] = {0};
 // LITE_OS_SEC_DATA_INIT
@@ -53,10 +54,11 @@ pub var g_tickPerSecond: t.UINT32 = 0;
 //     return LOS_OK;
 // }
 
-// LITE_OS_SEC_TEXT_INIT VOID OsTickStart(VOID)
-// {
-//     HalClockStart();
-// }
+extern fn HalClockStart() syserr.SYS_ERROR!void;
+// LITE_OS_SEC_TEXT_INIT
+pub fn OsTickStart() !void {
+    try HalClockStart();
+}
 
 // LITE_OS_SEC_TEXT_MINOR UINT64 LOS_TickCountGet(VOID)
 // {
