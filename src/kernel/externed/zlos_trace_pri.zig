@@ -1,4 +1,7 @@
 const t = @import("../zlos_typedef.zig");
+const trace = @import("../../kernel/include/zlos_trace.zig");
+const TRACE_HWI_FLAG = trace.TRACE_HWI_FLAG;
+const TRACE_TASK_FLAG = trace.TRACE_TASK_FLAG;
 // #ifdef LOSCFG_TRACE_CONTROL_AGENT
 // #define TRACE_CMD_END_CHAR                  0xD
 // #endif

@@ -6,677 +6,471 @@ const cpu = target.cpu;
 const defines = @import("./zlos_defines.zig");
 const _error = @import("./zlos_error.zig");
 const config = @import("./zlos_config.zig");
+const hwi = @import("./include/zlos_hwi.zig");
+const spinlock = @import("./zlos_spinlock.zig");
+const hal_hwi = @import("../drivers/interrupt/include/hal_hwi.zig");
+// /* spinlock for hwi module, only available on SMP mode */
+// LITE_OS_SEC_BSS  SPIN_LOCK_INIT(g_hwiSpin);
+pub var g_hwiSpin = spinlock.Spinlock.init("g_hwiSpin");
 
-const LOS_MOD_HWI = LOS_MOD_HWI;
-const LOS_ERRNO_OS_ERROR = _error.LOS_ERRNO_OS_ERROR;
-// /**
-//  * @ingroup los_hwi
-//  * Count of interrupts.
-//  */
-// extern size_t g_intCount[];
-pub extern var g_intCount: []t.size_t;
-
-// /**
-//  * An interrupt is active.
-//  */
-// extern size_t IntActive(VOID);
-pub fn IntActive() t.size_t {
-    var intCount: t.size_t = 0;
-    const intSave = LOS_IntLock();
-
-    intCount = g_intCount[cpu.ArchCurrCpuid()];
-    LOS_IntRestore(intSave);
-    return intCount;
+// #define HWI_LOCK(state)       LOS_SpinLockSave(&g_hwiSpin, &(state))
+pub inline fn HWI_LOCK(state: *t.INT32) void {
+    spinlock.LOS_SpinLockSave(&g_hwiSpin, state);
 }
-
-// /**
-//  * @ingroup los_hwi
-//  * It is used to check whether there are active interrupts or not.
-//  *
-//  * @see OS_INT_INACTIVE
-//  */
-// #define OS_INT_ACTIVE IntActive()
-pub inline fn OS_INT_ACTIVE() bool {
-    return IntActive() != 0;
+// #define HWI_UNLOCK(state)     LOS_SpinUnlockRestore(&g_hwiSpin, (state))
+pub inline fn HWI_UNLOCK(state: *t.INT32) void {
+    spinlock.LOS_SpinUnlockRestore(&g_hwiSpin, state);
 }
-// /**
-//  * @ingroup los_hwi
-//  * Check whether there are active interrupts or not.
-//  * The API returns a boolean value. True means no active interrupts on the current CPU.
-//  * False means that there are active interrupts on the current CPU.
-//  *
-//  * @see OS_INT_ACTIVE
-//  */
-// #define OS_INT_INACTIVE (!(OS_INT_ACTIVE))
-pub inline fn OS_INT_INACTIVE() bool {
-    return !OS_INT_ACTIVE();
-}
-// /**
-//  * @ingroup los_hwi
-//  * Highest priority of a hardware interrupt.This is an external parameter.
-//  * The priority range is [OS_HWI_PRIO_HIGHEST, OS_HWI_PRIO_HIGHEST + LOSCFG_HWI_PRIO_LIMIT - 1].
-//  */
-// #define OS_HWI_PRIO_HIGHEST 0
-pub const OS_HWI_PRIO_HIGHEST: t.UINT32 = 0;
-// /**
-//  * @ingroup los_hwi
-//  * This represents the interrupt priority range, the larger number, the lower priority, the interrupt processor is
-//  * modified uniformly.
-//  */
-// #define OS_HWI_PRIO_LOWEST (LOSCFG_HWI_PRIO_LIMIT - 1)
-pub const OS_HWI_PRIO_LOWEST = (config.LOSCFG_HWI_PRIO_LIMIT - 1);
-
-// /**
-//  * @ingroup los_hwi
-//  * The lower priority number, the higher priority, so OS_HWI_PRIO_LOWEST big than OS_HWI_PRIO_HIGHEST.
-//  */
-// #define HWI_PRI_VALID(pri) (((pri) >= OS_HWI_PRIO_HIGHEST) && ((pri) <= OS_HWI_PRIO_LOWEST))
-pub fn HWI_PRI_VALID(pri: t.UINT32) bool {
-    return (((pri) >= OS_HWI_PRIO_HIGHEST) and ((pri) <= OS_HWI_PRIO_LOWEST));
-}
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: Invalid interrupt number.
-//  *
-//  * Value: 0x02000900.
-//  *
-//  * Solution: Ensure that the interrupt number is valid.
-//  * @attention
-//  * <ul>
-//  * <li>Please use macros starting with LOS, and macros starting with OS will not be supported.</li>
-//  * </ul>
-//  */
-// #define LOS_ERRNO_HWI_NUM_INVALID               LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x00)
-pub const LOS_ERRNO_HWI_NUM_INVALID = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x00);
-// #define OS_ERRNO_HWI_NUM_INVALID                LOS_ERRNO_HWI_NUM_INVALID
-pub const OS_ERRNO_HWI_NUM_INVALID = LOS_ERRNO_HWI_NUM_INVALID;
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: Null hardware interrupt handling function.
-//  *
-//  * Value: 0x02000901.
-//  *
-//  * Solution: Pass in a valid non-null hardware interrupt handling function.
-//  * @attention
-//  * <ul>
-//  * <li>Please use macros starting with LOS, and macros starting with OS will not be supported.</li>
-//  * </ul>
-//  */
-// #define LOS_ERRNO_HWI_PROC_FUNC_NULL            LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x01)
-pub const LOS_ERRNO_HWI_PROC_FUNC_NULL = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x01);
-// #define OS_ERRNO_HWI_PROC_FUNC_NULL             LOS_ERRNO_HWI_PROC_FUNC_NULL
-pub const OS_ERRNO_HWI_PROC_FUNC_NULL = LOS_ERRNO_HWI_PROC_FUNC_NULL;
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: Insufficient interrupt resources for hardware interrupt creation.
-//  *
-//  * Value: 0x02000902.
-//  *
-//  * Solution: This error code is not in use temporarily.
-//  * @deprecated This error code is obsolete since LiteOS 5.0.0.
-//  */
-// #define OS_ERRNO_HWI_CB_UNAVAILABLE LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x02)
-pub const OS_ERRNO_HWI_CB_UNAVAILABLE = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x02);
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: Insufficient memory for hardware interrupt initialization.
-//  *
-//  * Value: 0x02000903.
-//  *
-//  * Solution: Expand the configured memory.
-//  * @attention
-//  * <ul>
-//  * <li>Please use macros starting with LOS, and macros starting with OS will not be supported.</li>
-//  * </ul>
-//  */
-// #define LOS_ERRNO_HWI_NO_MEMORY                 LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x03)
-pub const LOS_ERRNO_HWI_NO_MEMORY = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x03);
-// #define OS_ERRNO_HWI_NO_MEMORY                  LOS_ERRNO_HWI_NO_MEMORY
-pub const OS_ERRNO_HWI_NO_MEMORY = LOS_ERRNO_HWI_NO_MEMORY;
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: The interrupt has already been created.
-//  *
-//  * Value: 0x02000904.
-//  *
-//  * Solution: Check whether the interrupt specified by the passed-in interrupt number has
-//  * already been created.
-//  * @attention
-//  * <ul>
-//  * <li>Please use macros starting with LOS, and macros starting with OS will not be supported.</li>
-//  * </ul>
-//  */
-// #define LOS_ERRNO_HWI_ALREADY_CREATED           LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x04)
-pub const LOS_ERRNO_HWI_ALREADY_CREATED = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x04);
-// #define OS_ERRNO_HWI_ALREADY_CREATED            LOS_ERRNO_HWI_ALREADY_CREATED
-pub const OS_ERRNO_HWI_ALREADY_CREATED = LOS_ERRNO_HWI_ALREADY_CREATED;
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: Invalid interrupt priority.
-//  *
-//  * Value: 0x02000905.
-//  *
-//  * Solution: Ensure that the interrupt priority is valid.
-//  * @attention
-//  * <ul>
-//  * <li>Please use macros starting with LOS, and macros starting with OS will not be supported.</li>
-//  * </ul>
-//  */
-// #define LOS_ERRNO_HWI_PRIO_INVALID              LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x05)
-pub const LOS_ERRNO_HWI_PRIO_INVALID = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x05);
-// #define OS_ERRNO_HWI_PRIO_INVALID               LOS_ERRNO_HWI_PRIO_INVALID
-pub const OS_ERRNO_HWI_PRIO_INVALID = LOS_ERRNO_HWI_PRIO_INVALID;
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: Incorrect interrupt creation mode.
-//  *
-//  * Value: 0x02000906.
-//  *
-//  * Solution: This error code is not in use temporarily.
-//  * @deprecated This error code is obsolete since LiteOS 5.0.0.
-//  */
-// #define OS_ERRNO_HWI_MODE_INVALID LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x06)
-pub const OS_ERRNO_HWI_MODE_INVALID = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x06);
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: The interrupt has already been created as a fast interrupt.
-//  *
-//  * Value: 0x02000907.
-//  *
-//  * Solution: This error code is not in use temporarily.
-//  * @deprecated This error code is obsolete since LiteOS 5.0.0.
-//  */
-// #define OS_ERRNO_HWI_FASTMODE_ALREADY_CREATED LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x07)
-pub const OS_ERRNO_HWI_FASTMODE_ALREADY_CREATED = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x07);
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: The API is called during an interrupt, which is not allowed.
-//  *
-//  * Value: 0x02000908.
-//  *
-//  * Solution: This error code is not in use temporarily.
-//  * @attention
-//  * <ul>
-//  * <li>Please use macros starting with LOS, and macros starting with OS will not be supported.</li>
-//  * </ul>
-//  */
-// #define LOS_ERRNO_HWI_INTERR                    LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x08)
-pub const LOS_ERRNO_HWI_INTERR = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x08);
-// #define OS_ERRNO_HWI_INTERR                     LOS_ERRNO_HWI_INTERR
-pub const OS_ERRNO_HWI_INTERR = LOS_ERRNO_HWI_INTERR;
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: the hardware interrupt supports SHARED error.
-//  *
-//  * Value: 0x02000909.
-//  *
-//  * Solution: Check the input params hwiMode and irqParam of LOS_HwiCreate or
-//  * LOS_HwiDelete whether adapt the current hardware interrupt.
-//  * @attention
-//  * <ul>
-//  * <li>Please use macros starting with LOS, and macros starting with OS will not be supported.</li>
-//  * </ul>
-//  */
-// #define LOS_ERRNO_HWI_SHARED_ERROR              LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x09)
-// #define OS_ERRNO_HWI_SHARED_ERROR               LOS_ERRNO_HWI_SHARED_ERROR
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: Invalid interrupt Arg when interrupt mode is IRQF_SHARED.
-//  *
-//  * Value: 0x0200090a.
-//  *
-//  * Solution: This error code is not in use temporarily.
-//  * @deprecated This error code is obsolete since LiteOS 5.0.0.
-//  */
-// #define OS_ERRNO_HWI_ARG_INVALID LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x0a)
-pub const OS_ERRNO_HWI_ARG_INVALID = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x0a);
-
-// /**
-//  * @ingroup los_hwi
-//  * Hardware interrupt error code: The interrupt corresponded to the hardware interrupt number
-//  * or devid has not been created.
-//  *
-//  * Value: 0x0200090b.
-//  *
-//  * Solution: Check the irqParam->pDevId of LOS_HwiDelete, make sure the devid need to delete.
-//  * @attention
-//  * <ul>
-//  * <li>Please use macros starting with LOS, and macros starting with OS will not be supported.</li>
-//  * </ul>
-//  */
-// #define LOS_ERRNO_HWI_HWINUM_UNCREATE           LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x0b)
-pub const LOS_ERRNO_HWI_HWINUM_UNCREATE = LOS_ERRNO_OS_ERROR(LOS_MOD_HWI, 0x0b);
-// #define OS_ERRNO_HWI_HWINUM_UNCREATE            LOS_ERRNO_HWI_HWINUM_UNCREATE
-pub const OS_ERRNO_HWI_HWINUM_UNCREATE = LOS_ERRNO_HWI_HWINUM_UNCREATE;
-// /**
-//  * @ingroup los_hwi
-//  * Define the type HWI_HANDLE_T for a hardware interrupt number, the type is an unsigned int.
-//  */
-// typedef UINT32 HWI_HANDLE_T;
-pub const HWI_HANDLE_T = t.UINT32;
-// /**
-//  * @ingroup los_hwi
-//  * Define the type HWI_PRIOR_T for a hardware interrupt priority, the type is an unsigned short.
-//  */
-// typedef UINT16 HWI_PRIOR_T;
-pub const HWI_PRIOR_T = t.UINT16;
-// /**
-//  * @ingroup los_hwi
-//  * Define the type HWI_MODE_T for hardware interrupt mode configurations, the type is an unsigned short.
-//  */
-// typedef UINT16 HWI_MODE_T;
-pub const HWI_MODE_T = t.UINT16;
-// /**
-//  * @ingroup los_hwi
-//  * Define the type HWI_ARG_T for the parameter used for the hardware interrupt creation function.
-//  * The function of this parameter varies among platforms.
-//  */
-// typedef UINTPTR HWI_ARG_T;
-pub const HWI_ARG_T = t.UINTPTR;
-// /**
-//  * @ingroup  los_hwi
-//  * @brief Define the type of a hardware interrupt handling function.
-//  *
-//  * @par Description:
-//  * This definition is used to declare the type of a hardware interrupt handling function.
-//  * It will be used when calling LOS_HwiCreate.
-//  * @attention
-//  * None.
-//  *
-//  * @param None.
-//  *
-//  * @retval None.
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see LOS_HwiCreate
-//  * @since Huawei LiteOS V100R001C00
-//  */
-// typedef VOID (*HWI_PROC_FUNC)(VOID);
-pub const HWI_PROC_FUNC = *const fn () void;
-// /**
-//  * @ingroup  los_hwi
-//  * The flag means the IRQ is allowed to share among several devices.
-//  *
-//  * The flag only used by the kernel as part of the IRQ handling routines.
-//  */
-// #define IRQF_SHARED 0x8000U
-pub const IRQF_SHARED: t.UINT32 = 0x8000;
-
-// /**
-//  * @ingroup  los_hwi
-//  * The hardware interrupt parameter for #LOS_HwiDelete and interrupt handler in #LOS_HwiCreate.
-//  */
-pub const tagIrqParam = struct {
-    swIrq: t.UINT32 = 0, //**< The interrupt number */
-    pDevId: ?*t.VOID = null, //**< The pointer to the device ID that launches the interrupt */
-    pName: ?[]const u8 = null, //**< The interrupt name */
-};
-pub const HWI_IRQ_PARAM_S = tagIrqParam;
-// /**
-//  * @ingroup los_hwi
-//  * @brief Disable all interrupts.
-//  *
-//  * @par Description:
-//  * This API is used to disable all IRQ and FIQ interrupts in the CPSR.
-//  * @attention
-//  * None.
-//  *
-//  * @param None.
-//  *
-//  * @retval #UINT32 CPSR value before all interrupts are disabled.
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see LOS_IntRestore
-//  * @since Huawei LiteOS V100R001C00
-//  */
-// STATIC INLINE
-pub inline fn LOS_IntLock() t.UINT32 {
-    return cpu.ArchIntLock();
-}
-
-// /**
-//  * @ingroup los_hwi
-//  * @brief Enable all interrupts.
-//  *
-//  * @par Description:
-//  * This API is used to enable all IRQ and FIQ interrupts in the CPSR.
-//  * @attention
-//  * None.
-//  *
-//  * @param None.
-//  *
-//  * @retval #UINT32 CPSR value after all interrupts are enabled.
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see LOS_IntLock
-//  */
-// STATIC INLINE
-pub inline fn LOS_IntUnLock() t.UINT32 {
-    return cpu.ArchIntUnlock();
-}
-
-// /**
-//  * @ingroup los_hwi
-//  * @brief Restore interrupts.
-//  *
-//  * @par Description:
-//  * This API is used to restore the CPSR value obtained before all interrupts are disabled by #LOS_IntLock.
-//  * @attention
-//  * This API can be called only after all interrupts are disabled, and the input parameter value should be
-//  * the value returned by #LOS_IntLock.
-//  *
-//  * @param intSave [IN] Type #UINT32. CPSR value before all interrupts are disabled.
-//  *
-//  * @retval None.
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see LOS_IntLock
-//  * @since Huawei LiteOS V100R001C00
-//  */
-// STATIC INLINE
-pub inline fn LOS_IntRestore(intSave: t.UINT32) void {
-    cpu.ArchIntRestore(intSave);
-}
-
-// /**
-//  * @ingroup  los_hwi
-//  * @brief Create a hardware interrupt.
-//  *
-//  * @par Description:
-//  * This API is used to configure a hardware interrupt and register a hardware interrupt handling function.
-//  *
-//  * @attention
-//  * <ul>
-//  * <li>The hardware interrupt module is usable only when the configuration item for
-//  * hardware interrupt tailoring is enabled.</li>
-//  * <li>Before executing an interrupt on a platform, refer to the chip manual of the platform.</li>
-//  * <li>The parameter handler of this interface is a interrupt handler, it should be correct, otherwise,
-//  * the system may be abnormal.</li>
-//  * <li>The input irqParam could be NULL, if not, it should be address which point to a struct HWI_IRQ_PARAM_S,
-//  * the parameter pDenId and pName should be constant.</li>
-//  * <li>A smaller value indicates a higher interrupt priority, the interrupt processor is modified uniformly.</li>
-//  * </ul>
-//  *
-//  * @param  hwiNum     [IN] Type #HWI_HANDLE_T. The hardware interrupt number. The value range is
-//                                               [OS_USER_HWI_MIN, OS_USER_HWI_MAX].
-//  * @param  hwiPrio    [IN] Type #HWI_PRIOR_T. The hardware interrupt priority. The value range is
-//  *                                            [OS_HWI_PRIO_HIGHEST, OS_HWI_PRIO_LOWEST].
-//  * @param  hwiMode    [IN] Type #HWI_MODE_T. The hardware interrupt mode.
-//  * @param  hwiHandler [IN] Type #HWI_PROC_FUNC. The interrupt handler used when a hardware interrupt is triggered.
-//  * @param  irqParam   [IN] Type #HWI_IRQ_PARAM_S. The input parameter of the interrupt handler used when
-//  *                                                a hardware interrupt is triggered.
-//  *
-//  * @retval #LOS_ERRNO_HWI_PROC_FUNC_NULL      Null hardware interrupt handling function.
-//  * @retval #LOS_ERRNO_HWI_NUM_INVALID         Invalid interrupt number.
-//  * @retval #LOS_ERRNO_HWI_NO_MEMORY           Insufficient memory for hardware interrupt creation.
-//  * @retval #LOS_ERRNO_HWI_ALREADY_CREATED     The interrupt handler being created has already been created.
-//  * @retval #LOS_ERRNO_HWI_SHARED_ERROR        The interrupt can not be shared. The interrupt number has been
-//  *                                            registered as a non-shared interrupt, or a shared interrupt is
-//  *                                            specified to be created, but the device ID is empty.
-//  * @retval #LOS_OK                            The interrupt is successfully created.
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see LOS_HwiDelete
-//  * @since Huawei LiteOS V100R001C00
-//  */
-// extern UINT32 LOS_HwiCreate(HWI_HANDLE_T hwiNum,
-//                             HWI_PRIOR_T hwiPrio,
-//                             HWI_MODE_T hwiMode,
-//                             HWI_PROC_FUNC hwiHandler,
-//                             HWI_IRQ_PARAM_S *irqParam);
-
-// /**
-//  * @ingroup  los_hwi
-//  * @brief delete a hardware interrupt.
-//  *
-//  * @par Description:
-//  * This API is used to delete a hardware interrupt.
-//  *
-//  * @attention
-//  * <ul>
-//  * <li>The hardware interrupt module is usable only when the configuration item for
-//  * hardware interrupt tailoring is enabled.</li>
-//  * <li>Hardware interrupt number value range: [OS_USER_HWI_MIN, OS_USER_HWI_MAX].</li>
-//  * <li>Before executing an interrupt on a platform, refer to the chip manual of the platform.</li>
-//  * </ul>
-//  *
-//  * @param  hwiNum   [IN] Type #HWI_HANDLE_T. The hardware interrupt number.
-//  * @param  irqParam [IN] Type #HWI_IRQ_PARAM_S *. ID of hardware interrupt which will base on
-//  *                                                when delete the hardware interrupt.
-//  *
-//  * @retval #LOS_ERRNO_HWI_NUM_INVALID         Invalid interrupt number.
-//  * @retval #LOS_ERRNO_HWI_SHARED_ERROR        The interrupt number is a shared interrupt, but the device ID of the
-//  *                                            shared interrupt to be deleted is not specified.
-//  * @retval #LOS_ERRNO_HWI_HWINUM_UNCREATE     The interrupt corresponded to the hwiNum(
-//  *                                            the hardware interrupt number) or
-//  *                                            irqParam->pDevId(the interrupt device id)
-//  *                                            has not been created.
-//  * @retval #LOS_ERRNO_HWI_PROC_FUNC_NULL      Not supported disable interrupt.
-//  * @retval #LOS_OK                            The interrupt is successfully deleted.
-//  *
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see LOS_HwiCreate
-//  * @since Huawei LiteOS V100R001C00
-//  */
-// extern UINT32 LOS_HwiDelete(HWI_HANDLE_T hwiNum, HWI_IRQ_PARAM_S *irqParam);
-
-// /**
-//  * @ingroup los_hwi
-//  * @brief Trigger interrupts.
-//  *
-//  * @par Description:
-//  * The generation of external hardware interrupts is simulated by writing
-//  * the relevant registers of the interrupt controller.
-//  * @attention
-//  * This function depends on the hardware implementation of the interrupt controller.
-//  *
-//  * @param hwiNum   [IN] Type #HWI_HANDLE_T. The hardware interrupt number.
-//  *
-//  * @retval #LOS_ERRNO_HWI_NUM_INVALID         Invalid interrupt number.
-//  * @retval #LOS_ERRNO_HWI_PROC_FUNC_NULL      Not supported by the interrupt controller.
-//  * @retval #LOS_OK                            The interrupt is successfully triggered.
-//  *
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @since Huawei LiteOS V200R005C00
-//  */
-// extern UINT32 LOS_HwiTrigger(HWI_HANDLE_T hwiNum);
-
-// /**
-//  * @ingroup los_hwi
-//  * @brief clear interrupts.
-//  *
-//  * @par Description:
-//  * Clear the status bit of the interrupt number corresponding to the interrupt controller.
-//  * @attention
-//  * This function depends on the hardware implementation of the interrupt controller.
-//  *
-//  * @param hwiNum   [IN] Type #HWI_HANDLE_T. The hardware interrupt number.
-//  *
-//  * @retval #LOS_ERRNO_HWI_NUM_INVALID         Invalid interrupt number.
-//  * @retval #LOS_ERRNO_HWI_PROC_FUNC_NULL      Not supported by the interrupt controller.
-//  * @retval #LOS_OK                            The interrupt is successfully cleared.
-//  *
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @since Huawei LiteOS V200R005C00
-//  */
-// extern UINT32 LOS_HwiClear(HWI_HANDLE_T hwiNum);
-
-// /**
-//  * @ingroup los_hwi
-//  * @brief Enable interrupts.
-//  *
-//  * @par Description:
-//  * Enable the corresponding interrupt mask of the interrupt controller, so
-//  * that the interrupt source can be sent to the CPU.
-//  * @attention
-//  * This function depends on the hardware implementation of the interrupt controller.
-//  *
-//  * @param hwiNum   [IN] Type #HWI_HANDLE_T. The hardware interrupt number.
-//  *
-//  * @retval #LOS_ERRNO_HWI_NUM_INVALID         Invalid interrupt number.
-//  * @retval #LOS_ERRNO_HWI_PROC_FUNC_NULL      Not supported by the interrupt controller.
-//  * @retval #LOS_OK                            The interrupt is successfully enabled.
-//  *
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see LOS_HwiDisable
-//  * @since Huawei LiteOS V200R005C00
-//  */
-// extern UINT32 LOS_HwiEnable(HWI_HANDLE_T hwiNum);
-
-// /**
-//  * @ingroup los_hwi
-//  * @brief Disable interrupts.
-//  *
-//  * @par Description:
-//  * Disable the corresponding interrupt mask of the interrupt controller, so
-//  * that the interrupt source can be sent to the CPU.
-//  * @attention
-//  * This function depends on the hardware implementation of the interrupt controller.
-//  *
-//  * @param hwiNum   [IN] Type #HWI_HANDLE_T. The hardware interrupt number.
-//  *
-//  * @retval #LOS_ERRNO_HWI_NUM_INVALID         Invalid interrupt number.
-//  * @retval #LOS_ERRNO_HWI_PROC_FUNC_NULL      Not supported by the interrupt controller.
-//  * @retval #LOS_OK                            The interrupt is successfully disabled.
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see LOS_HwiEnable
-//  * @since Huawei LiteOS V200R005C00
-//  */
-// extern UINT32 LOS_HwiDisable(HWI_HANDLE_T hwiNum);
-
-// #ifdef LOSCFG_KERNEL_SMP
-// /**
-//  * @ingroup los_hwi
-//  * @brief Send inter-core interrupts to designated cores.
-//  *
-//  * @par Description:
-//  * Send inter-core interrupts to designated cores.
-//  * @attention
-//  * This function depends on the hardware implementation of the interrupt
-//  * controller and CPU architecture, Only used in SMP architecture.
-//  *
-//  * @param hwiNum   [IN] Type #HWI_HANDLE_T: hardware interrupt number.
-//  * @param cpuMask  [IN] Type #UINT32: CPU number.
-//  *
-//  * @retval #LOS_ERRNO_HWI_NUM_INVALID         Invalid interrupt number.
-//  * @retval #LOS_ERRNO_HWI_PROC_FUNC_NULL      Not supported by the interrupt controller.
-//  * @retval #LOS_OK                            Inter-core interrupt sent successfully.
-//  *
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @since Huawei LiteOS V200R005C00
-//  */
-// extern UINT32 LOS_HwiSendIpi(HWI_HANDLE_T hwiNum, UINT32 cpuMask);
-
-// /**
-//  * @ingroup los_hwi
-//  * @brief Interrupt response specified CPU processing.
-//  *
-//  * @par Description:
-//  * Interrupt response specified CPU processing.
-//  * @attention
-//  * This function depends on the hardware implementation of the interrupt
-//  * controller and CPU architecture, Only used in SMP architecture.
-//  *
-//  * @param hwiNum   [IN] Type #HWI_HANDLE_T. The hardware interrupt number.
-//  * @param cpuMask  [IN] Type #UINT32. The CPU number.
-//  *
-//  * @retval #LOS_ERRNO_HWI_NUM_INVALID         Invalid interrupt number.
-//  * @retval #LOS_ERRNO_HWI_PROC_FUNC_NULL      Not supported by the interrupt controller.
-//  * @retval #LOS_OK                            The interrupt is successfully set affinity.
-//  *
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @since Huawei LiteOS V200R005C00
-//  */
-// extern UINT32 LOS_HwiSetAffinity(HWI_HANDLE_T hwiNum, UINT32 cpuMask);
-// #endif /* LOSCFG_KERNEL_SMP */
-
-// /**
-//  * @ingroup los_hwi
-//  * @brief Set interrupts priority.
-//  *
-//  * @par Description:
-//  * Set interrupts priority.
-//  * @attention
-//  * This function depends on the hardware implementation of the interrupt
-//  * controller and CPU architecture.
-//  *
-//  * @param hwiNum     [IN] Type #HWI_HANDLE_T: hardware interrupt number.
-//  * @param priority   [IN] Type #HWI_PRIOR_T: interrupt priority to be set.
-//  *
-//  * @retval #LOS_ERRNO_HWI_NUM_INVALID         Invalid interrupt number.
-//  * @retval #LOS_ERRNO_HWI_PRIO_INVALID        Invalid interrupt priority.
-//  * @retval #LOS_ERRNO_HWI_PROC_FUNC_NULL      Not supported by the interrupt controller.
-//  * @retval #LOS_OK                            The interrupt is successfully set priority.
-//  *
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API
-//  * declaration.</li></ul>
-//  * @see None
-//  * @since Huawei LiteOS V200R005C00
-//  */
-// extern UINT32 LOS_HwiSetPriority(HWI_HANDLE_T hwiNum, HWI_PRIOR_T priority);
+// size_t g_intCount[LOSCFG_KERNEL_CORE_NUM] = {0};
 
 // #ifdef LOSCFG_KERNEL_LOWPOWER
-// /**
-//  * @ingroup los_hwi
-//  * @brief Define the lowpower framework wakeup function type.
-//  *
-//  * @par Description:
-//  * This API is used to define the lowpower framework wakeup function type.
-//  *
-//  * @attention None.
-//  *
-//  * @param  hwiNum [IN] The interrupt number.
-//  *
-//  * @retval None.
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see None.
-//  * @since Huawei LiteOS V200R005C10
-//  */
-// typedef VOID (*WAKEUPFROMINTHOOK)(HWI_HANDLE_T hwiNum);
-
-// /**
-//  * @ingroup  los_hwi
-//  * @brief Register a hook to wakeup from interrupt.
-//  *
-//  * @par Description:
-//  * This API is used to register a recovery function after wakeup from interrupt
-//  *
-//  * @attention None.
-//  *
-//  * @param  hook [IN] The lowpower wakeup hook.
-//  *
-//  * @retval None.
-//  * @par Dependency:
-//  * <ul><li>los_hwi.h: the header file that contains the API declaration.</li></ul>
-//  * @see None.
-//  * @since Huawei LiteOS V200R005C10
-//  */
-// extern VOID LOS_IntWakeupHookReg(WAKEUPFROMINTHOOK hook);
+pub var g_intWakeupHook: ?hwi.WAKEUPFROMINTHOOK = null;
 // #endif
 
-// #ifdef __cplusplus
-// #if __cplusplus
-// }
-// #endif /* __cplusplus */
-// #endif /* __cplusplus */
+pub var g_hwiOps: ?*HwiControllerOps = null;
 
-// #endif /* _LOS_HWI_H */
+// typedef VOID (*HWI_PROC_FUNC0)(VOID);
+// typedef VOID (*HWI_PROC_FUNC2)(INT32, VOID *);
+
+// STATIC INLINE VOID OsIrqNestingActive(UINT32 hwiNum)
+// {
+// #ifdef LOSCFG_ARCH_INTERRUPT_PREEMPTION
+//     /* preemption not allowed when handling tick interrupt */
+//     if (hwiNum != OS_TICK_INT_NUM) {
+//         (VOID)LOS_IntUnLock();
+//     }
+// #endif
+// }
+
+// STATIC INLINE VOID OsIrqNestingInactive(UINT32 hwiNum)
+// {
+// #ifdef LOSCFG_ARCH_INTERRUPT_PREEMPTION
+//     if (hwiNum != OS_TICK_INT_NUM) {
+//         (VOID)LOS_IntLock();
+//     }
+// #endif
+// }
+
+// size_t OsIrqNestingCntGet(VOID)
+// {
+//     return g_intCount[ArchCurrCpuid()];
+// }
+
+// VOID OsIrqNestingCntSet(size_t val)
+// {
+//     g_intCount[ArchCurrCpuid()] = val;
+// }
+
+// STATIC INLINE VOID InterruptHandle(HwiHandleInfo *hwiForm)
+// {
+//     hwiForm->respCount++;
+// #ifdef LOSCFG_SHARED_IRQ
+//     while (hwiForm->next != NULL) {
+//         hwiForm = hwiForm->next;
+// #endif
+//         if (hwiForm->registerInfo) {
+//             HWI_PROC_FUNC2 func = (HWI_PROC_FUNC2)hwiForm->hook;
+//             if (func != NULL) {
+//                 UINTPTR *param = (UINTPTR *)(hwiForm->registerInfo);
+//                 func((INT32)(*param), (VOID *)(*(param + 1)));
+//             }
+//         } else {
+//             HWI_PROC_FUNC0 func = (HWI_PROC_FUNC0)hwiForm->hook;
+//             if (func != NULL) {
+//                 func();
+//             }
+//         }
+// #ifdef LOSCFG_SHARED_IRQ
+//     }
+// #endif
+// }
+
+// VOID OsIntHandle(UINT32 hwiNum, HwiHandleInfo *hwiForm)
+// {
+//     size_t *intCnt = NULL;
+
+// #ifdef LOSCFG_CPUP_INCLUDE_IRQ
+//     OsCpupIrqStart();
+// #endif
+//     intCnt = &g_intCount[ArchCurrCpuid()];
+//     *intCnt = *intCnt + 1;
+
+// #ifdef LOSCFG_DEBUG_SCHED_STATISTICS
+//     OsHwiStatistics(hwiNum);
+// #endif
+
+// #ifdef LOSCFG_KERNEL_LOWPOWER
+//     if (g_intWakeupHook != NULL) {
+//         g_intWakeupHook(hwiNum);
+//     }
+// #endif
+//     LOS_TRACE(HWI_RESPONSE_IN, hwiNum);
+
+//     OsIrqNestingActive(hwiNum);
+//     InterruptHandle(hwiForm);
+//     OsIrqNestingInactive(hwiNum);
+
+//     LOS_TRACE(HWI_RESPONSE_OUT, hwiNum);
+
+//     *intCnt = *intCnt - 1;
+
+// #ifdef LOSCFG_CPUP_INCLUDE_IRQ
+//     OsCpupIrqEnd(hwiNum);
+// #endif
+// }
+
+// VOID OsIntEntry(VOID)
+// {
+//     if ((g_hwiOps != NULL) && (g_hwiOps->handleIrq != NULL)) {
+//         g_hwiOps->handleIrq();
+//     }
+//     return;
+// }
+
+// STATIC HWI_ARG_T OsHwiCpIrqParam(const HWI_IRQ_PARAM_S *irqParam)
+// {
+//     HWI_IRQ_PARAM_S *paramByAlloc = NULL;
+
+//     paramByAlloc = (HWI_IRQ_PARAM_S *)LOS_MemAlloc(m_aucSysMem0, sizeof(HWI_IRQ_PARAM_S));
+//     if (paramByAlloc != NULL) {
+//         (VOID)memcpy_s(paramByAlloc, sizeof(HWI_IRQ_PARAM_S), irqParam, sizeof(HWI_IRQ_PARAM_S));
+//     }
+
+//     return (HWI_ARG_T)paramByAlloc;
+// }
+// #ifndef LOSCFG_SHARED_IRQ
+// STATIC UINT32 OsHwiDel(HwiHandleInfo *hwiForm, const HWI_IRQ_PARAM_S *irqParam, UINT32 irqId)
+// {
+//     UINT32 intSave;
+
+//     (VOID)irqParam;
+//     HWI_LOCK(intSave);
+//     hwiForm->hook = NULL;
+//     if (hwiForm->registerInfo) {
+//         (VOID)LOS_MemFree(m_aucSysMem0, (VOID *)hwiForm->registerInfo);
+//     }
+//     hwiForm->registerInfo = 0;
+//     hwiForm->respCount = 0;
+//     if (g_hwiOps->disableIrq == NULL) {
+//         HWI_UNLOCK(intSave);
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+//     g_hwiOps->disableIrq(irqId);
+
+//     HWI_UNLOCK(intSave);
+//     return LOS_OK;
+// }
+
+// STATIC UINT32 OsHwiCreate(HwiHandleInfo *hwiForm, HWI_MODE_T hwiMode, HWI_PROC_FUNC hwiHandler,
+//                           const HWI_IRQ_PARAM_S *irqParam)
+// {
+//     UINT32 intSave;
+
+//     if (hwiMode & IRQF_SHARED) {
+//         return LOS_ERRNO_HWI_SHARED_ERROR;
+//     }
+//     HWI_LOCK(intSave);
+//     if (hwiForm->hook == NULL) {
+//         hwiForm->hook = hwiHandler;
+
+//         if (irqParam != NULL) {
+//             hwiForm->registerInfo = OsHwiCpIrqParam(irqParam);
+//             if (hwiForm->registerInfo == (HWI_ARG_T)NULL) {
+//                 HWI_UNLOCK(intSave);
+//                 return LOS_ERRNO_HWI_NO_MEMORY;
+//             }
+//         }
+//     } else {
+//         HWI_UNLOCK(intSave);
+//         return LOS_ERRNO_HWI_ALREADY_CREATED;
+//     }
+//     HWI_UNLOCK(intSave);
+//     return LOS_OK;
+// }
+// #else /* LOSCFG_SHARED_IRQ */
+// STATIC INLINE UINT32 OsFreeHwiNode(HwiHandleInfo *head, HwiHandleInfo *hwiForm, UINT32 irqId)
+// {
+//     UINT32 ret = LOS_OK;
+
+//     if (hwiForm->registerInfo != (HWI_ARG_T)NULL) {
+//         (VOID)LOS_MemFree(m_aucSysMem0, (VOID *)hwiForm->registerInfo);
+//     }
+
+//     (VOID)LOS_MemFree(m_aucSysMem0, hwiForm);
+
+//     if (head->next == NULL) {
+//         head->shareMode = 0;
+//         head->respCount = 0;
+//         if (g_hwiOps->disableIrq == NULL) {
+//             ret = LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//             return ret;
+//         }
+//         g_hwiOps->disableIrq(irqId);
+//     }
+
+//     return ret;
+// }
+
+// STATIC UINT32 OsHwiDel(HwiHandleInfo *head, const HWI_IRQ_PARAM_S *irqParam, UINT32 irqId)
+// {
+//     HwiHandleInfo *hwiFormPrev = NULL;
+//     HwiHandleInfo *hwiForm = NULL;
+//     UINT32 intSave;
+//     UINT32 ret;
+
+//     HWI_LOCK(intSave);
+
+//     if ((head->shareMode & IRQF_SHARED) && ((irqParam == NULL) || (irqParam->pDevId == NULL))) {
+//         HWI_UNLOCK(intSave);
+//         return LOS_ERRNO_HWI_SHARED_ERROR;
+//     }
+
+//     /* Non-shared interrupt. */
+//     if (!(head->shareMode & IRQF_SHARED)) {
+//         if (head->next == NULL) {
+//             HWI_UNLOCK(intSave);
+//             return LOS_ERRNO_HWI_HWINUM_UNCREATE;
+//         }
+
+//         hwiForm = head->next;
+//         head->next = NULL;
+//         ret = OsFreeHwiNode(head, hwiForm, irqId);
+//         HWI_UNLOCK(intSave);
+//         return ret;
+//     }
+
+//     /* Shared interrupt. */
+//     hwiFormPrev = head;
+//     hwiForm = head->next;
+//     while (hwiForm != NULL) {
+//         if (((HWI_IRQ_PARAM_S *)(hwiForm->registerInfo))->pDevId == irqParam->pDevId) {
+//             break;
+//         }
+//         hwiFormPrev = hwiForm;
+//         hwiForm = hwiForm->next;
+//     }
+
+//     if (hwiForm == NULL) {
+//         HWI_UNLOCK(intSave);
+//         return LOS_ERRNO_HWI_HWINUM_UNCREATE;
+//     }
+
+//     hwiFormPrev->next = hwiForm->next;
+//     ret = OsFreeHwiNode(head, hwiForm, irqId);
+//     HWI_UNLOCK(intSave);
+//     return ret;
+// }
+
+// STATIC UINT32 OsHwiCreate(HwiHandleInfo *head, HWI_MODE_T hwiMode, HWI_PROC_FUNC hwiHandler,
+//                           const HWI_IRQ_PARAM_S *irqParam)
+// {
+//     UINT32 intSave;
+//     HwiHandleInfo *hwiFormNode = NULL;
+//     HWI_IRQ_PARAM_S *hwiParam = NULL;
+//     HWI_MODE_T modeResult = hwiMode & IRQF_SHARED;
+//     HwiHandleInfo *hwiForm = NULL;
+
+//     if (modeResult && ((irqParam == NULL) || (irqParam->pDevId == NULL))) {
+//         return LOS_ERRNO_HWI_SHARED_ERROR;
+//     }
+
+//     HWI_LOCK(intSave);
+
+//     if ((head->next != NULL) && ((modeResult == 0) || (!(head->shareMode & IRQF_SHARED)))) {
+//         HWI_UNLOCK(intSave);
+//         return LOS_ERRNO_HWI_SHARED_ERROR;
+//     }
+
+//     hwiForm = head;
+//     while (hwiForm->next != NULL) {
+//         hwiForm = hwiForm->next;
+//         hwiParam = (HWI_IRQ_PARAM_S *)(hwiForm->registerInfo);
+//         if (hwiParam->pDevId == irqParam->pDevId) {
+//             HWI_UNLOCK(intSave);
+//             return LOS_ERRNO_HWI_ALREADY_CREATED;
+//         }
+//     }
+
+//     hwiFormNode = (HwiHandleInfo *)LOS_MemAlloc(m_aucSysMem0, sizeof(HwiHandleInfo));
+//     if (hwiFormNode == NULL) {
+//         HWI_UNLOCK(intSave);
+//         return LOS_ERRNO_HWI_NO_MEMORY;
+//     }
+//     hwiForm->respCount = 0;
+
+//     if (irqParam != NULL) {
+//         hwiFormNode->registerInfo = OsHwiCpIrqParam(irqParam);
+//         if (hwiFormNode->registerInfo == (HWI_ARG_T)NULL) {
+//             HWI_UNLOCK(intSave);
+//             (VOID) LOS_MemFree(m_aucSysMem0, hwiFormNode);
+//             return LOS_ERRNO_HWI_NO_MEMORY;
+//         }
+//     } else {
+//         hwiFormNode->registerInfo = 0;
+//     }
+
+//     hwiFormNode->hook = hwiHandler;
+//     hwiFormNode->next = (struct tagHwiHandleForm *)NULL;
+//     hwiForm->next = hwiFormNode;
+
+//     head->shareMode = modeResult;
+
+//     HWI_UNLOCK(intSave);
+//     return LOS_OK;
+// }
+// #endif
+
+// size_t IntActive()
+// {
+//     size_t intCount;
+//     UINT32 intSave = LOS_IntLock();
+
+//     intCount = g_intCount[ArchCurrCpuid()];
+//     LOS_IntRestore(intSave);
+//     return intCount;
+// }
+
+// LITE_OS_SEC_TEXT UINT32 LOS_HwiCreate(HWI_HANDLE_T hwiNum,
+//                                            HWI_PRIOR_T hwiPrio,
+//                                            HWI_MODE_T hwiMode,
+//                                            HWI_PROC_FUNC hwiHandler,
+//                                            HWI_IRQ_PARAM_S *irqParam)
+// {
+//     UINT32 ret;
+//     HwiHandleInfo *hwiForm = NULL;
+
+//     if (hwiHandler == NULL) {
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+
+//     if ((g_hwiOps == NULL) || (g_hwiOps->getHandleForm == NULL)) {
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+
+//     hwiForm = g_hwiOps->getHandleForm(hwiNum);
+//     if (hwiForm == NULL) {
+//         return LOS_ERRNO_HWI_NUM_INVALID;
+//     }
+//     LOS_TRACE(HWI_CREATE, hwiNum, hwiPrio, hwiMode, (UINTPTR)hwiHandler);
+
+//     ret = OsHwiCreate(hwiForm, hwiMode, hwiHandler, irqParam);
+//     LOS_TRACE(HWI_CREATE_SHARE, hwiNum, (UINTPTR)(irqParam != NULL ? irqParam->pDevId : NULL), ret);
+
+//     /* priority will be changed if setIrqPriority implemented,
+//      * but interrupt preemption only allowed when LOSCFG_ARCH_INTERRUPT_PREEMPTION enable */
+//     if ((ret == LOS_OK) && (g_hwiOps->setIrqPriority != NULL)) {
+//         ret = g_hwiOps->setIrqPriority(hwiNum, hwiPrio);
+//         if (ret != LOS_OK) {
+//             (VOID)OsHwiDel(hwiForm, irqParam, hwiNum);
+//         }
+//     }
+//     return ret;
+// }
+
+// LITE_OS_SEC_TEXT UINT32 LOS_HwiDelete(HWI_HANDLE_T hwiNum, HWI_IRQ_PARAM_S *irqParam)
+// {
+//     UINT32 ret;
+//     HwiHandleInfo *hwiForm = NULL;
+
+//     if ((g_hwiOps == NULL) || (g_hwiOps->getHandleForm == NULL)) {
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+
+//     hwiForm = g_hwiOps->getHandleForm(hwiNum);
+//     if (hwiForm == NULL) {
+//         return LOS_ERRNO_HWI_NUM_INVALID;
+//     }
+//     LOS_TRACE(HWI_DELETE, hwiNum);
+
+//     ret = OsHwiDel(hwiForm, irqParam, hwiNum);
+//     LOS_TRACE(HWI_DELETE_SHARE, hwiNum, (UINTPTR)(irqParam != NULL ? irqParam->pDevId : NULL), ret);
+
+//     return ret;
+// }
+
+// LITE_OS_SEC_TEXT UINT32 LOS_HwiTrigger(HWI_HANDLE_T hwiNum)
+// {
+//     if ((g_hwiOps == NULL) || (g_hwiOps->triggerIrq == NULL)) {
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+//     LOS_TRACE(HWI_TRIGGER, hwiNum);
+
+//     return g_hwiOps->triggerIrq(hwiNum);
+// }
+
+// LITE_OS_SEC_TEXT UINT32 LOS_HwiEnable(HWI_HANDLE_T hwiNum)
+// {
+//     if ((g_hwiOps == NULL) || (g_hwiOps->enableIrq == NULL)) {
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+//     LOS_TRACE(HWI_ENABLE, hwiNum);
+
+//     return g_hwiOps->enableIrq(hwiNum);
+// }
+
+// LITE_OS_SEC_TEXT UINT32 LOS_HwiDisable(HWI_HANDLE_T hwiNum)
+// {
+//     if ((g_hwiOps == NULL) || (g_hwiOps->disableIrq == NULL)) {
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+//     LOS_TRACE(HWI_DISABLE, hwiNum);
+
+//     return g_hwiOps->disableIrq(hwiNum);
+// }
+
+// LITE_OS_SEC_TEXT UINT32 LOS_HwiClear(HWI_HANDLE_T hwiNum)
+// {
+//     if ((g_hwiOps == NULL) || (g_hwiOps->clearIrq == NULL)) {
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+//     LOS_TRACE(HWI_CLEAR, hwiNum);
+
+//     return g_hwiOps->clearIrq(hwiNum);
+// }
+
+// LITE_OS_SEC_TEXT UINT32 LOS_HwiSetPriority(HWI_HANDLE_T hwiNum, HWI_PRIOR_T priority)
+// {
+//     if ((g_hwiOps == NULL) || (g_hwiOps->setIrqPriority == NULL)) {
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+//     LOS_TRACE(HWI_SETPRI, hwiNum, priority);
+
+//     return g_hwiOps->setIrqPriority(hwiNum, priority);
+// }
+// #ifdef LOSCFG_KERNEL_SMP
+// LITE_OS_SEC_TEXT
+pub fn LOS_HwiSetAffinity(hwiNum: hwi.HWI_HANDLE_T, cpuMask: t.UINT32) !void {
+    if ((g_hwiOps == null) or (g_hwiOps.setIrqCpuAffinity == null)) {
+        return error.LOS_ERRNO_HWI_PROC_FUNC_NULL;
+    }
+    LOS_TRACE(HWI_SETAFFINITY, hwiNum, cpuMask);
+
+    return g_hwiOps.setIrqCpuAffinity(hwiNum, cpuMask);
+}
+
+// LITE_OS_SEC_TEXT UINT32 LOS_HwiSendIpi(HWI_HANDLE_T hwiNum, UINT32 cpuMask)
+// {
+//     if ((g_hwiOps == NULL) || (g_hwiOps->sendIpi == NULL)) {
+//         return LOS_ERRNO_HWI_PROC_FUNC_NULL;
+//     }
+//     LOS_TRACE(HWI_SENDIPI, hwiNum, cpuMask);
+
+//     return g_hwiOps->sendIpi(cpuMask, hwiNum);
+// }
+// #endif
+
+// #ifdef LOSCFG_KERNEL_LOWPOWER
+// LITE_OS_SEC_TEXT_MINOR
+pub inline fn LOS_IntWakeupHookReg(hook: hwi.WAKEUPFROMINTHOOK) void {
+    if (defines.LOSCFG_KERNEL_LOWPOWER) {
+        hwi.g_intWakeupHook = hook;
+    }
+}
+// #endif
+
+// /* Initialization of the hardware interrupt */
+// LITE_OS_SEC_TEXT_INIT
+pub inline fn OsHwiInit() void {
+    hal_hwi.ArchIrqInit();
+    return;
+}

@@ -13,3 +13,4 @@ pub const LOSCFG_LIB_CONFIGURABLE = false;
 pub const LOSCFG_KERNEL_NX = false;
 pub const LOSCFG_KERNEL_DYNLOAD = false;
 pub const LOSCFG_BASE_IPC_SEM = true;
+pub const LOSCFG_CORTEX_M_NVIC = true;

@@ -8,7 +8,9 @@ const lockdep = @import("../zlos_lockdep.zig");
 const sched_debug_pri = @import("../base/zlos_sched_debug_pri.zig");
 const sched_pri = @import("../base/zlos_sched_pri.zig");
 const hwi = @import("../zlos_hwi.zig");
+const task = @import("../include/zlos_task.zig");
 
+pub usingnamespace task;
 const INT_PEND_RESCH = @intFromEnum(sched_pri.SchedFlag.INT_PEND_RESCH);
 
 pub const TSK_ENTRY_FUNC = if (defines.LOSCFG_OBSOLETE_API)

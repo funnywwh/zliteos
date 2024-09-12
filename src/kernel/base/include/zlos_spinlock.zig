@@ -1,29 +1,26 @@
-const t = @import("./zlos_typedef.zig");
-const defines = @import("./zlos_defines.zig");
-const lockdep = @import("./zlos_lockdep.zig");
-const hwi = @import("./include/zlos_hwi.zig");
-const task = @import("../kernel/base/zlos_task.zig");
-const syserror = @import("../kernel/zlos_error.zig");
-pub extern fn ArchSpinLock(lock: *t.size_t) void;
-pub extern fn ArchSpinUnlock(lock: *t.size_t) void;
-pub extern fn ArchSpinTrylock(lock: *t.size_t) syserror.SYS_ERROR!t.UINT32;
+const t = @import("../../zlos_typedef.zig");
+const defines = @import("../../zlos_defines.zig");
+const lockdep = @import("../../zlos_lockdep.zig");
+const hwi = @import("../../include/zlos_hwi.zig");
+const task = @import("../../base/zlos_task.zig");
+const spinlock = @import("../../zlos_spinlock.zig");
 // #ifdef LOSCFG_KERNEL_SMP_LOCKDEP
 pub const SPINLOCK_OWNER_INIT = null;
 
 // #define LOCKDEP_CHECK_IN(lock)  OsLockDepCheckIn(lock)
-pub inline fn LOCKDEP_CHECK_IN(lock: SPIN_LOCK_S) void {
+pub inline fn LOCKDEP_CHECK_IN(lock: *spinlock.SPIN_LOCK_S) void {
     if (defines.LOSCFG_KERNEL_SMP_LOCKDEP) {
         lockdep.OsLockDepCheckIn(lock);
     }
 }
 // #define LOCKDEP_RECORD(lock)    OsLockDepRecord(lock)
-pub inline fn LOCKDEP_RECORD(lock: SPIN_LOCK_S) void {
+pub inline fn LOCKDEP_RECORD(lock: *spinlock.SPIN_LOCK_S) void {
     if (defines.LOSCFG_KERNEL_SMP_LOCKDEP) {
         lockdep.OsLockDepRecord(lock);
     }
 }
 // #define LOCKDEP_CHECK_OUT(lock) OsLockDepCheckOut(lock)
-pub inline fn LOCKDEP_CHECK_OUT(lock: SPIN_LOCK_S) void {
+pub inline fn LOCKDEP_CHECK_OUT(lock: *spinlock.SPIN_LOCK_S) void {
     if (defines.LOSCFG_KERNEL_SMP_LOCKDEP) {
         lockdep.OsLockDepCheckOut(lock);
     }
@@ -34,7 +31,27 @@ pub inline fn LOCKDEP_CLEAR_LOCKS() void {
         lockdep.OsLockdepClearSpinlocks();
     }
 }
+// #define SPIN_LOCK_INITIALIZER(lockName) \
+// {                                       \
+//     .rawLock    = 0U,                   \
+//     .cpuid      = (UINT32)(-1),         \
+//     .owner      = SPINLOCK_OWNER_INIT,  \
+//     .name       = #lockName,            \
+// }
+// #else
+// #define LOCKDEP_CHECK_IN(lock)
+// #define LOCKDEP_RECORD(lock)
+// #define LOCKDEP_CHECK_OUT(lock)
+// #define LOCKDEP_CLEAR_LOCKS()
+// #define SPIN_LOCK_INITIALIZER(lockName) \
+// {                                       \
+//     .rawLock    = 0U,                   \
+// }
+// #endif
 
+pub inline fn SPIN_LOCK_INITIALIZER(lockName: []const u8) spinlock.SPIN_LOCK_S {
+    return spinlock.SPIN_LOCK_S.init(lockName);
+}
 // /**
 //  * @ingroup  los_spinlock
 //  * <ul>
@@ -50,49 +67,26 @@ pub inline fn LOCKDEP_CLEAR_LOCKS() void {
 //  * </ul>
 //  */
 // #define SPIN_LOCK_INIT(lock)  SPIN_LOCK_S lock = SPIN_LOCK_INITIALIZER(lock)
-
+pub inline fn SPIN_LOCK_INIT(lockName: []const u8) spinlock.SPIN_LOCK_S {
+    return SPIN_LOCK_INITIALIZER(lockName);
+}
 // /**
 //  * @ingroup  los_spinlock
 //  * Define the structure of spinlock.
 //  */
-pub const Spinlock = struct {
-    //     size_t      rawLock;            /**< raw spinlock */
-    rawLock: t.size_t = 0,
-    // #ifdef LOSCFG_KERNEL_SMP_LOCKDEP
-    //     UINT32      cpuid;              /**< the cpu id when the lock is obtained. It is defined
-    //                                          only when LOSCFG_KERNEL_SMP_LOCKDEP is defined. */
-    //     VOID        *owner;             /**< the pointer to the lock owner's task control block.
-    //                                          It is defined only when LOSCFG_KERNEL_SMP_LOCKDEP is
-    //                                          defined. */
-    //     const CHAR  *name;              /**< the lock owner's task name. It is defined only when
-    //                                          LOSCFG_KERNEL_SMP_LOCKDEP is defined. */
-    // #endif
-    LOSCFG_KERNEL_SMP_LOCKDEP: ?struct {
-        cpuid: t.UINT32 = @as(u32, @bitCast(@as(i32, -1))),
-        owner: ?*t.VOID = null,
-        name: ?[]const u8 = null,
-    } = if (defines.LOSCFG_KERNEL_SMP_LOCKDEP)
-        .{}
-    else
-        null,
+// struct Spinlock {
+//     size_t      rawLock;            /**< raw spinlock */
+// #ifdef LOSCFG_KERNEL_SMP_LOCKDEP
+//     UINT32      cpuid;              /**< the cpu id when the lock is obtained. It is defined
+//                                          only when LOSCFG_KERNEL_SMP_LOCKDEP is defined. */
+//     VOID        *owner;             /**< the pointer to the lock owner's task control block.
+//                                          It is defined only when LOSCFG_KERNEL_SMP_LOCKDEP is
+//                                          defined. */
+//     const CHAR  *name;              /**< the lock owner's task name. It is defined only when
+//                                          LOSCFG_KERNEL_SMP_LOCKDEP is defined. */
+// #endif
+// };
 
-    pub inline fn init(lockName: []const u8) Spinlock {
-        if (defines.LOSCFG_KERNEL_SMP_LOCKDEP) {
-            return .{
-                .rawLock = 0,
-                .LOSCFG_KERNEL_SMP_LOCKDEP = .{
-                    .owner = SPINLOCK_OWNER_INIT,
-                    .name = lockName,
-                },
-            };
-        } else {
-            return .{
-                .rawLock = 0,
-            };
-        }
-    }
-};
-pub const SPIN_LOCK_S = Spinlock;
 // #ifdef LOSCFG_KERNEL_SMP
 // /**
 //  * @ingroup  los_spinlock
@@ -122,16 +116,16 @@ pub const SPIN_LOCK_S = Spinlock;
 //  * @since Huawei LiteOS V200R003C00
 //  */
 // LITE_OS_SEC_ALW_INLINE STATIC
-pub inline fn LOS_SpinLock(lock: *SPIN_LOCK_S) void {
-    // /*
-    //  * disable the scheduler, so it won't do schedule until
-    //  * scheduler is reenabled. The LOS_TaskUnlock should not
-    //  * be directly called along this critic area.
-    //  */
+pub inline fn LOS_SpinLock(lock: *spinlock.SPIN_LOCK_S) void {
+    //     /*
+    //      * disable the scheduler, so it won't do schedule until
+    //      * scheduler is reenabled. The LOS_TaskUnlock should not
+    //      * be directly called along this critic area.
+    //      */
     task.LOS_TaskLock();
 
     LOCKDEP_CHECK_IN(lock);
-    ArchSpinLock(&lock.rawLock);
+    spinlock.ArchSpinLock(&lock.rawLock);
     LOCKDEP_RECORD(lock);
 }
 
@@ -161,18 +155,14 @@ pub inline fn LOS_SpinLock(lock: *SPIN_LOCK_S) void {
 //  * @see LOS_SpinLock | LOS_SpinLockSave | LOS_SpinUnlock | SPIN_LOCK_INIT | LOS_SpinInit
 //  * @since Huawei LiteOS V200R003C00
 //  */
-// LITE_OS_SEC_ALW_INLINE STATIC INLINE INT32 LOS_SpinTrylock(SPIN_LOCK_S *lock)
-// {
-//     LOS_TaskLock();
+// LITE_OS_SEC_ALW_INLINE STATIC
+pub inline fn LOS_SpinTrylock(lock: *spinlock.SPIN_LOCK_S) !void {
+    task.LOS_TaskLock();
 
-//     LOCKDEP_CHECK_IN(lock);
-//     INT32 ret = ArchSpinTrylock(&lock.rawLock);
-//     if (ret == LOS_OK) {
-//         LOCKDEP_RECORD(lock);
-//     }
-
-//     return ret;
-// }
+    LOCKDEP_CHECK_IN(lock);
+    try spinlock.ArchSpinTrylock(&lock.rawLock);
+    LOCKDEP_RECORD(lock);
+}
 
 // /**
 //  * @ingroup  los_spinlock
@@ -195,14 +185,14 @@ pub inline fn LOS_SpinLock(lock: *SPIN_LOCK_S) void {
 //  * @see LOS_SpinLock | LOS_SpinTrylock | LOS_SpinLockSave | LOS_SpinUnlockRestore
 //  * @since Huawei LiteOS V200R003C00
 //  */
-// LITE_OS_SEC_ALW_INLINE STATIC INLINE VOID LOS_SpinUnlock(SPIN_LOCK_S *lock)
-// {
-//     LOCKDEP_CHECK_OUT(lock);
-//     ArchSpinUnlock(&lock.rawLock);
+// LITE_OS_SEC_ALW_INLINE STATIC
+pub inline fn LOS_SpinUnlock(lock: *spinlock.SPIN_LOCK_S) !void {
+    LOCKDEP_CHECK_OUT(lock);
+    try spinlock.ArchSpinUnlock(&lock.rawLock);
 
-//     /* restore the scheduler flag */
-//     LOS_TaskUnlock();
-// }
+    // restore the scheduler flag */
+    try task.LOS_TaskUnlock();
+}
 
 // /**
 //  * @ingroup  los_spinlock
@@ -233,9 +223,9 @@ pub inline fn LOS_SpinLock(lock: *SPIN_LOCK_S) void {
 //  * @since Huawei LiteOS V200R003C00
 //  */
 // LITE_OS_SEC_ALW_INLINE STATIC
-pub inline fn LOS_SpinLockSave(lock: *SPIN_LOCK_S, intSave: *t.UINT32) void {
+pub inline fn LOS_SpinLockSave(lock: *spinlock.SPIN_LOCK_S, intSave: *t.UINT32) void {
     intSave.* = hwi.LOS_IntLock();
-    hwi.LOS_SpinLock(lock);
+    LOS_SpinLock(lock);
 }
 
 // /**
@@ -263,8 +253,8 @@ pub inline fn LOS_SpinLockSave(lock: *SPIN_LOCK_S, intSave: *t.UINT32) void {
 //  * @since Huawei LiteOS V200R003C00
 //  */
 // LITE_OS_SEC_ALW_INLINE STATIC
-pub inline fn LOS_SpinUnlockRestore(lock: *SPIN_LOCK_S, intSave: t.UINT32) void {
-    Spinlock.LOS_SpinUnlock(lock);
+pub inline fn LOS_SpinUnlockRestore(lock: *spinlock.SPIN_LOCK_S, intSave: t.UINT32) !void {
+    try LOS_SpinUnlock(lock);
     hwi.LOS_IntRestore(intSave);
 }
 
@@ -290,7 +280,7 @@ pub inline fn LOS_SpinUnlockRestore(lock: *SPIN_LOCK_S, intSave: t.UINT32) void 
 //  * @since Huawei LiteOS V200R003C00
 //  */
 // LITE_OS_SEC_ALW_INLINE STATIC
-pub inline fn LOS_SpinHeld(lock: *SPIN_LOCK_S) t.BOOL {
+pub inline fn LOS_SpinHeld(lock: *spinlock.SPIN_LOCK_S) t.BOOL {
     return (lock.rawLock != 0);
 }
 
@@ -318,14 +308,7 @@ pub inline fn LOS_SpinHeld(lock: *SPIN_LOCK_S) t.BOOL {
 //  * <ul><li>los_spinlock.h: the header file that contains the API declaration.</li></ul>
 //  * @since Huawei LiteOS V200R003C00
 //  */
-// LITE_OS_SEC_ALW_INLINE STATIC INLINE
-pub inline fn LOS_SpinInit(lock: *SPIN_LOCK_S) void {
-    lock.rawLock = 0;
-    if (defines.LOSCFG_KERNEL_SMP_LOCKDEP) {
-        if (lock.LOSCFG_KERNEL_SMP_LOCKDEP) |*v| {
-            v.cpuid = -1;
-            v.owner = SPINLOCK_OWNER_INIT;
-            v.name = "spinlock";
-        }
-    }
+// LITE_OS_SEC_ALW_INLINE STATIC
+pub inline fn LOS_SpinInit(lock: *spinlock.SPIN_LOCK_S) void {
+    lock.* = lock.init("spinlock");
 }

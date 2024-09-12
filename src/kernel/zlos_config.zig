@@ -77,21 +77,21 @@ pub const OS_SYS_CLOCK = target.clock.get_bus_clk();
 // /**
 //  * system sections start and end address
 //  */
-// extern CHAR __int_stack_start;
-// extern CHAR __int_stack_end;
-// extern CHAR __rodata_start;
-// extern CHAR __rodata_end;
-// extern CHAR __bss_start;
-// extern CHAR __bss_end;
-// extern CHAR __text_start;
-// extern CHAR __text_end;
-// extern CHAR __ram_data_start;
-// extern CHAR __ram_data_end;
-// extern CHAR __exc_heap_start;
-// extern CHAR __exc_heap_end;
-// extern CHAR __heap_start;
-// extern CHAR __init_array_start__;
-// extern CHAR __init_array_end__;
+pub extern var __int_stack_start: t.CHAR;
+pub extern var __int_stack_end: t.CHAR;
+pub extern var __rodata_start: t.CHAR;
+pub extern var __rodata_end: t.CHAR;
+pub extern var __bss_start: t.CHAR;
+pub extern var __bss_end: t.CHAR;
+pub extern var __text_start: t.CHAR;
+pub extern var __text_end: t.CHAR;
+pub extern var __ram_data_start: t.CHAR;
+pub extern var __ram_data_end: t.CHAR;
+pub extern var __exc_heap_start: t.CHAR;
+pub extern var __exc_heap_end: t.CHAR;
+pub extern var __heap_start: t.CHAR;
+pub extern var __init_array_start__: t.CHAR;
+pub extern var __init_array_end__: t.CHAR;
 
 // /****************************** System clock module configuration ****************************/
 // /**
@@ -310,3 +310,4 @@ pub fn LOS_SET_DL_NX_HEAP_SIZE(size: t.size_t) void {
 }
 
 pub const LOSCFG_HWI_PRIO_LIMIT = 32;
+pub const LOSCFG_PLATFORM_HWI_LIMIT = 256;

@@ -39,6 +39,7 @@ pub const OS_TASK_STATUS_UNUSED = 0x0001;
 
 // /* The task is running */
 // #define OS_TASK_STATUS_RUNNING      0x0010U
+pub const OS_TASK_STATUS_RUNNING: t.UINT32 = 0x0010;
 
 // /* The task is delayed */
 // #define OS_TASK_STATUS_DELAY        0x0020U
